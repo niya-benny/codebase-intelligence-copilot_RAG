@@ -1,6 +1,31 @@
-.venv/
+# Python bytecode and test caches
 __pycache__/
 *.py[cod]
 .pytest_cache/
-.rag-copilot/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+
+# Virtual environments and local tooling
+.venv/
+venv/
+env/
+.env
+.envrc
+
+# Builds and package metadata
+build/
+dist/
 *.egg-info/
+*.egg
+
+# Copilot index and editor files
+.rag-copilot/
+.vscode/
+.idea/
+
+# Local databases and logs
+*.sqlite3
+*.db
+*.log
