@@ -9,6 +9,7 @@ This initial version supports Python repositories and provides:
 
 - AST-aware chunks for modules, classes, and functions
 - SQLite FTS5 keyword search
+- Local dense-vector similarity fused with keyword results using reciprocal-rank fusion
 - A CLI that returns grounded code excerpts with `path:start-end` citations
 
 ## Quick start
@@ -26,7 +27,7 @@ rag-copilot search C:\path\to\repository "where is token refresh handled?"
 ## Roadmap
 
 1. **Now:** reliable local keyword retrieval and citation-ready Python chunks.
-2. Add embeddings and hybrid rank fusion.
+2. Swap the local vector baseline for a code-trained embedding model and add reranking.
 3. Support Tree-sitter for multiple languages and graph expansion.
 4. Add answer generation, evaluation data, incremental Git indexing, and a web UI.
 

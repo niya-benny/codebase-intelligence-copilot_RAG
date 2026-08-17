@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from rag_copilot.indexing import index_repository
-from rag_copilot.search import search_repository
+from rag_copilot.search import _reciprocal_rank_fusion, search_repository
 
 
 class SearchTests(unittest.TestCase):
@@ -17,3 +17,8 @@ class SearchTests(unittest.TestCase):
 
             self.assertEqual(results[0].symbol, "refresh_token")
             self.assertEqual(results[0].citation, "auth.py:1-2")
+
+    def test_rank_fusion_rewards_results_seen_by_both_retrievers(self) -> None:
+        fused = _reciprocal_rank_fusion([[10, 20], [20, 30]])
+
+        self.assertEqual(fused[0], 20)

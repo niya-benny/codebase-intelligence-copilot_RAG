@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
+import json
 from pathlib import Path
 
 from .chunking import chunk_python_file
+from .embeddings import HashEmbeddingProvider
 from .models import CodeChunk
 
 INDEX_DIRECTORY = ".rag-copilot"
@@ -27,6 +29,7 @@ def initialise_schema(connection: sqlite3.Connection) -> None:
         """
         DROP TABLE IF EXISTS chunks;
         DROP TABLE IF EXISTS chunks_fts;
+        DROP TABLE IF EXISTS chunk_embeddings;
         CREATE TABLE chunks (
             id INTEGER PRIMARY KEY,
             path TEXT NOT NULL,
@@ -38,6 +41,10 @@ def initialise_schema(connection: sqlite3.Connection) -> None:
         );
         CREATE VIRTUAL TABLE chunks_fts USING fts5(
             symbol, path, code, content='chunks', content_rowid='id'
+        );
+        CREATE TABLE chunk_embeddings (
+            chunk_id INTEGER PRIMARY KEY REFERENCES chunks(id),
+            vector TEXT NOT NULL
         );
         """
     )
@@ -57,18 +64,26 @@ def index_repository(repo_root: Path) -> tuple[int, int]:
     # Explicit closing is required on Windows so an index can be replaced or removed.
     with closing(connect(repo_root)) as connection, connection:
         initialise_schema(connection)
+        embedder = HashEmbeddingProvider()
         for file_path in iter_python_files(repo_root):
             file_count += 1
             for chunk in chunk_python_file(repo_root, file_path):
-                _insert_chunk(connection, chunk)
+                _insert_chunk(connection, chunk, embedder)
                 chunk_count += 1
         connection.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
     return file_count, chunk_count
 
 
-def _insert_chunk(connection: sqlite3.Connection, chunk: CodeChunk) -> None:
-    connection.execute(
+def _insert_chunk(
+    connection: sqlite3.Connection, chunk: CodeChunk, embedder: HashEmbeddingProvider
+) -> None:
+    cursor = connection.execute(
         """INSERT INTO chunks(path, symbol, kind, start_line, end_line, code)
         VALUES (?, ?, ?, ?, ?, ?)""",
         (chunk.path, chunk.symbol, chunk.kind, chunk.start_line, chunk.end_line, chunk.code),
+    )
+    embedding_text = f"{chunk.symbol}\n{chunk.kind}\n{chunk.path}\n{chunk.code}"
+    connection.execute(
+        "INSERT INTO chunk_embeddings(chunk_id, vector) VALUES (?, ?)",
+        (cursor.lastrowid, json.dumps(embedder.embed(embedding_text))),
     )
