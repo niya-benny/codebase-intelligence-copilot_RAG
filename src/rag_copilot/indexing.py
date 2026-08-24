@@ -5,7 +5,7 @@ from contextlib import closing
 import json
 from pathlib import Path
 
-from .chunking import chunk_python_file
+from .chunking import chunk_source_file
 from .call_graph import record_call_edges
 from .embeddings import HashEmbeddingProvider
 from .models import CodeChunk
@@ -13,6 +13,7 @@ from .models import CodeChunk
 INDEX_DIRECTORY = ".rag-copilot"
 DATABASE_NAME = "index.sqlite3"
 IGNORED_DIRECTORIES = {".git", ".venv", "venv", "__pycache__", "node_modules", INDEX_DIRECTORY}
+SOURCE_SUFFIXES = {".py", ".js", ".mjs", ".cjs", ".jsx"}
 
 
 def database_path(repo_root: Path) -> Path:
@@ -58,8 +59,10 @@ def initialise_schema(connection: sqlite3.Connection) -> None:
     )
 
 
-def iter_python_files(repo_root: Path):
-    for path in repo_root.rglob("*.py"):
+def iter_source_files(repo_root: Path):
+    for path in repo_root.rglob("*"):
+        if path.suffix not in SOURCE_SUFFIXES:
+            continue
         if any(part in IGNORED_DIRECTORIES for part in path.relative_to(repo_root).parts):
             continue
         yield path
@@ -74,9 +77,9 @@ def index_repository(repo_root: Path) -> tuple[int, int]:
         initialise_schema(connection)
         embedder = HashEmbeddingProvider()
         indexed_chunks: list[tuple[int, CodeChunk]] = []
-        for file_path in iter_python_files(repo_root):
+        for file_path in iter_source_files(repo_root):
             file_count += 1
-            for chunk in chunk_python_file(repo_root, file_path):
+            for chunk in chunk_source_file(repo_root, file_path):
                 indexed_chunks.append((_insert_chunk(connection, chunk, embedder), chunk))
                 chunk_count += 1
         record_call_edges(connection, indexed_chunks)

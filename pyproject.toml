@@ -7,7 +7,10 @@ name = "codebase-intelligence-copilot"
 version = "0.1.0"
 description = "Local-first, citation-grounded retrieval for source code"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "tree-sitter>=0.25,<0.27",
+    "tree-sitter-javascript>=0.23,<0.27",
+]
 
 [project.scripts]
 rag-copilot = "rag_copilot.cli:main"

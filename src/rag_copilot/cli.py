@@ -28,7 +28,7 @@ def main() -> None:
 
     if args.command == "index":
         files, chunks = index_repository(repository)
-        print(f"Indexed {chunks} chunks from {files} Python files in {repository}")
+        print(f"Indexed {chunks} chunks from {files} source files in {repository}")
         return
 
     if args.command == "trace":
