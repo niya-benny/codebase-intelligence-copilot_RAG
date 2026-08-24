@@ -3,6 +3,7 @@ import tempfile
 import unittest
 
 from rag_copilot.indexing import index_repository
+from rag_copilot.graph_search import trace_symbol
 from rag_copilot.models import CodeChunk
 from rag_copilot.query_rewrite import rewrite_query
 from rag_copilot.reranking import rerank_chunks
@@ -43,3 +44,17 @@ class SearchTests(unittest.TestCase):
         reranked = rerank_chunks([1, 2], chunks, "refresh token")
 
         self.assertEqual(reranked[0], 2)
+
+    def test_trace_finds_local_callers_and_callees(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def refresh_token():\n    return 'new-token'\n\n"
+                "def handle_request():\n    return refresh_token()\n"
+            )
+            index_repository(root)
+
+            trace = trace_symbol(root, "refresh_token")
+
+            self.assertEqual([chunk.symbol for chunk in trace.callers], ["handle_request"])
+            self.assertEqual([chunk.symbol for chunk in trace.callees], [])

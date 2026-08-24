@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from .chunking import chunk_python_file
+from .call_graph import record_call_edges
 from .embeddings import HashEmbeddingProvider
 from .models import CodeChunk
 
@@ -27,9 +28,10 @@ def connect(repo_root: Path) -> sqlite3.Connection:
 def initialise_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(
         """
-        DROP TABLE IF EXISTS chunks;
-        DROP TABLE IF EXISTS chunks_fts;
+        DROP TABLE IF EXISTS call_edges;
         DROP TABLE IF EXISTS chunk_embeddings;
+        DROP TABLE IF EXISTS chunks_fts;
+        DROP TABLE IF EXISTS chunks;
         CREATE TABLE chunks (
             id INTEGER PRIMARY KEY,
             path TEXT NOT NULL,
@@ -45,6 +47,12 @@ def initialise_schema(connection: sqlite3.Connection) -> None:
         CREATE TABLE chunk_embeddings (
             chunk_id INTEGER PRIMARY KEY REFERENCES chunks(id),
             vector TEXT NOT NULL
+        );
+        CREATE TABLE call_edges (
+            caller_chunk_id INTEGER NOT NULL REFERENCES chunks(id),
+            callee_chunk_id INTEGER NOT NULL REFERENCES chunks(id),
+            call_name TEXT NOT NULL,
+            UNIQUE(caller_chunk_id, callee_chunk_id, call_name)
         );
         """
     )
@@ -65,18 +73,20 @@ def index_repository(repo_root: Path) -> tuple[int, int]:
     with closing(connect(repo_root)) as connection, connection:
         initialise_schema(connection)
         embedder = HashEmbeddingProvider()
+        indexed_chunks: list[tuple[int, CodeChunk]] = []
         for file_path in iter_python_files(repo_root):
             file_count += 1
             for chunk in chunk_python_file(repo_root, file_path):
-                _insert_chunk(connection, chunk, embedder)
+                indexed_chunks.append((_insert_chunk(connection, chunk, embedder), chunk))
                 chunk_count += 1
+        record_call_edges(connection, indexed_chunks)
         connection.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
     return file_count, chunk_count
 
 
 def _insert_chunk(
     connection: sqlite3.Connection, chunk: CodeChunk, embedder: HashEmbeddingProvider
-) -> None:
+) -> int:
     cursor = connection.execute(
         """INSERT INTO chunks(path, symbol, kind, start_line, end_line, code)
         VALUES (?, ?, ?, ?, ?, ?)""",
@@ -87,3 +97,4 @@ def _insert_chunk(
         "INSERT INTO chunk_embeddings(chunk_id, vector) VALUES (?, ?)",
         (cursor.lastrowid, json.dumps(embedder.embed(embedding_text))),
     )
+    return cursor.lastrowid

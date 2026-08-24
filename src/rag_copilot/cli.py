@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .indexing import index_repository
+from .graph_search import trace_symbol
 from .search import search_repository
 
 
@@ -16,6 +17,9 @@ def main() -> None:
     search_parser.add_argument("repository", type=Path)
     search_parser.add_argument("query")
     search_parser.add_argument("--limit", type=int, default=5)
+    trace_parser = subcommands.add_parser("trace", help="Show local callers and callees of a symbol")
+    trace_parser.add_argument("repository", type=Path)
+    trace_parser.add_argument("symbol")
     args = parser.parse_args()
 
     repository = args.repository.resolve()
@@ -27,6 +31,19 @@ def main() -> None:
         print(f"Indexed {chunks} chunks from {files} Python files in {repository}")
         return
 
+    if args.command == "trace":
+        try:
+            trace = trace_symbol(repository, args.symbol)
+        except FileNotFoundError as error:
+            parser.error(str(error))
+        if not trace.definitions:
+            print(f"No indexed definition found for: {args.symbol}")
+            return
+        _print_trace_section("Definitions", trace.definitions)
+        _print_trace_section("Called by", trace.callers)
+        _print_trace_section("Calls", trace.callees)
+        return
+
     try:
         results = search_repository(repository, args.query, args.limit)
     except FileNotFoundError as error:
@@ -36,6 +53,15 @@ def main() -> None:
         return
     for result in results:
         print(f"\n{result.kind} {result.symbol} - {result.citation}\n{result.code}")
+
+
+def _print_trace_section(title: str, chunks) -> None:
+    print(f"\n{title}:")
+    if not chunks:
+        print("  (none found)")
+        return
+    for chunk in chunks:
+        print(f"  {chunk.kind} {chunk.symbol} - {chunk.citation}")
 
 
 if __name__ == "__main__":

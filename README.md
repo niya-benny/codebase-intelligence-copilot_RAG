@@ -23,13 +23,14 @@ pip install -e .
 # Index another repository (the index is stored in .rag-copilot/ there)
 rag-copilot index C:\path\to\repository
 rag-copilot search C:\path\to\repository "where is token refresh handled?"
+rag-copilot trace C:\path\to\repository refresh_token
 ```
 
 ## Roadmap
 
 1. **Now:** reliable local keyword retrieval and citation-ready Python chunks.
 2. Swap the local vector baseline and deterministic reranker for code-trained models.
-3. Support Tree-sitter for multiple languages and graph expansion.
+3. Support Tree-sitter for multiple languages and resolve object/import calls in the graph.
 4. Add answer generation, evaluation data, incremental Git indexing, and a web UI.
 
 ## Project layout
