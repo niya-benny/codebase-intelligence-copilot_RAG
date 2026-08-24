@@ -7,28 +7,32 @@ from pathlib import Path
 from .embeddings import HashEmbeddingProvider, cosine_similarity
 from .indexing import connect, database_path
 from .models import CodeChunk
+from .query_rewrite import rewrite_query
+from .reranking import rerank_chunks
 
 RRF_K = 60
 
 
 def search_repository(repo_root: Path, query: str, limit: int = 5) -> list[CodeChunk]:
-    """Run FTS5 and vector retrieval, then combine rankings with RRF."""
+    """Rewrite, retrieve with FTS/vector search, fuse, then rerank evidence."""
     if not database_path(repo_root).exists():
         raise FileNotFoundError("No index found. Run `rag-copilot index <repo>` first.")
 
-    keyword_query = _fts_query(query)
-    if not keyword_query or not query.strip():
+    rewritten_query = rewrite_query(query)
+    keyword_query = _fts_query(rewritten_query.terms)
+    if not keyword_query:
         return []
 
     with closing(connect(repo_root)) as connection:
         keyword_results = _keyword_search(connection, keyword_query, limit=50)
-        semantic_results = _vector_search(connection, query, limit=50)
+        semantic_results = _vector_search(connection, rewritten_query.text, limit=50)
 
     chunks_by_id = {chunk_id: chunk for chunk_id, chunk in keyword_results + semantic_results}
     fused_ids = _reciprocal_rank_fusion(
         [[chunk_id for chunk_id, _ in keyword_results], [chunk_id for chunk_id, _ in semantic_results]]
     )
-    return [chunks_by_id[chunk_id] for chunk_id in fused_ids[:limit]]
+    reranked_ids = rerank_chunks(fused_ids, chunks_by_id, query)
+    return [chunks_by_id[chunk_id] for chunk_id in reranked_ids[:limit]]
 
 
 def _keyword_search(connection, query: str, limit: int) -> list[tuple[int, CodeChunk]]:
@@ -57,9 +61,8 @@ def _vector_search(connection, query: str, limit: int) -> list[tuple[int, CodeCh
     return [(chunk_id, chunk) for _, chunk_id, chunk in scored[:limit]]
 
 
-def _fts_query(query: str) -> str:
+def _fts_query(terms: tuple[str, ...]) -> str:
     # OR supports natural-language queries while quoted terms avoid FTS operators.
-    terms = [term for term in query.replace("_", " ").split() if term.isalnum()]
     return " OR ".join(f'"{term}"' for term in terms)
 
 
